@@ -1,0 +1,15 @@
+# Environments
+venv/
+__pycache__/
+tmp/
+
+# Data & Features (Upload these separately as Zip)
+data/
+features/
+models/
+
+# Raw media & archives
+*.mp4
+*.avi
+*.zip
+*.tar.gz
