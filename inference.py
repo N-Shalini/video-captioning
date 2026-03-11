@@ -8,6 +8,7 @@ from torchvision import models, transforms
 from model import VideoCaptionModel
 from config import Config
 import argparse
+import textwrap
 
 def infer_video(video_path, model_path, vocab_path='data/vocab.json'):
     # Load vocab
@@ -97,13 +98,72 @@ def infer_video(video_path, model_path, vocab_path='data/vocab.json'):
         
     return " ".join(caption_words)
 
+def play_video_with_caption(video_path, caption):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"Error: Cannot open video '{video_path}'")
+        return
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    window_title = "Video Captioning"
+    cv2.namedWindow(window_title, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window_title, 800, 500)
+
+    # Wrap caption if too long
+    wrapped = textwrap.fill(caption, width=60)
+    caption_lines = wrapped.split('\n')
+
+    font       = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = 0.75
+    font_color = (255, 255, 255)
+    font_thick = 1
+    bar_height = 40 * len(caption_lines) + 20
+
+    print(f"\nCaption: {caption}")
+    print("Playing video... Press 'Q' to quit.")
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            # Loop back to start
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            continue
+
+        h, w = frame.shape[:2]
+
+        # Draw semi-transparent black bar at bottom
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, h - bar_height), (w, h), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
+
+        # Draw each caption line
+        for i, line in enumerate(caption_lines):
+            text_size = cv2.getTextSize(line, font, font_scale, font_thick)[0]
+            x = (w - text_size[0]) // 2
+            y = h - bar_height + 30 + i * 40
+            # Shadow for readability
+            cv2.putText(frame, line, (x+1, y+1), font, font_scale, (0,0,0), font_thick+1, cv2.LINE_AA)
+            cv2.putText(frame, line, (x, y),   font, font_scale, font_color, font_thick, cv2.LINE_AA)
+
+        cv2.imshow(window_title, frame)
+
+        key = cv2.waitKey(int(1000 / fps)) & 0xFF
+        if key == ord('q') or key == ord('Q') or key == 27:  # Q or ESC
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--video', type=str, required=True, help="Path to mp4 or avi video file")
-    parser.add_argument('--model', type=str, default='models/caption_model_ep10.pth', help="Path to trained .pth model file")
+    parser.add_argument('--model', type=str, default='models/caption_model_ep20.pth', help="Path to trained .pth model file")
     args = parser.parse_args()
-    
+
     result = infer_video(args.video, args.model)
     print("--------------------------------------------------")
     print(f"Prediction for '{args.video}':\n\t{result}")
     print("--------------------------------------------------")
+
+    play_video_with_caption(args.video, result)
