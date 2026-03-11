@@ -48,8 +48,8 @@ def train_model():
     
     model.train()
     
-    target_epochs = start_epoch + Config.EPOCHS
-    for epoch in range(start_epoch, target_epochs):
+    # We want to train up to a total of Config.EPOCHS
+    for epoch in range(start_epoch, Config.EPOCHS):
         total_loss = 0.0
         
         # tqdm for batch info
@@ -80,9 +80,15 @@ def train_model():
         avg_loss = total_loss / len(dataloader)
         print(f"Epoch [{epoch+1}/{Config.EPOCHS}], Average Loss: {avg_loss:.4f}")
         
-        # save every epoch (or best loss)
-        torch.save(model.state_dict(), os.path.join(Config.MODELS_DIR, f"caption_model_ep{epoch+1}.pth"))
+        # Save the current epoch's model checkpoint
+        current_checkpoint = os.path.join(Config.MODELS_DIR, f"caption_model_ep{epoch+1}.pth")
+        torch.save(model.state_dict(), current_checkpoint)
         
+        # Overwrite/Delete the old checkpoint to save disk space
+        prev_checkpoint = os.path.join(Config.MODELS_DIR, f"caption_model_ep{epoch}.pth")
+        if os.path.exists(prev_checkpoint):
+            os.remove(prev_checkpoint)
+            
     print("Training finished.")
 
 if __name__ == '__main__':
