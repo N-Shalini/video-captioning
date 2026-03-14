@@ -1,0 +1,91 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class Attention(nn.Module):
+    def __init__(self, hidden_dim):
+        super(Attention, self).__init__()
+        self.W1 = nn.Linear(hidden_dim, hidden_dim)
+        self.W2 = nn.Linear(hidden_dim, hidden_dim)
+        self.V = nn.Linear(hidden_dim, 1)
+
+    def forward(self, encoder_out, hidden_state):
+        # encoder_out: [batch_size, max_frames, hidden_dim]
+        # hidden_state: [batch_size, hidden_dim]
+        
+        hidden_expanded = hidden_state.unsqueeze(1).expand_as(encoder_out)
+        
+        energy = torch.tanh(self.W1(encoder_out) + self.W2(hidden_expanded))
+        scores = self.V(energy) # [batch_size, max_frames, 1]
+        
+        attention_weights = F.softmax(scores, dim=1)
+        
+        context_vector = attention_weights * encoder_out
+        context_vector = context_vector.sum(dim=1) # [batch_size, hidden_dim]
+        
+        return context_vector, attention_weights
+
+class Encoder(nn.Module):
+    def __init__(self, feature_dim, hidden_dim):
+        super(Encoder, self).__init__()
+        self.linear = nn.Linear(feature_dim, hidden_dim)
+        self.bn = nn.LayerNorm(hidden_dim)
+        self.relu = nn.ReLU()
+        self.dropout = nn.Dropout(0.5)
+        
+    def forward(self, x):
+        # x: [batch_size, max_frames, feature_dim]
+        batch_size, max_frames, feature_dim = x.size()
+        
+        x = x.view(-1, feature_dim)
+        x = self.linear(x)
+        x = self.bn(x)
+        x = self.relu(x)
+        x = self.dropout(x)
+        
+        x = x.view(batch_size, max_frames, -1)
+        global_context = x.mean(dim=1)
+        
+        return x, global_context
+
+class Decoder(nn.Module):
+    def __init__(self, vocab_size, embed_dim, hidden_dim):
+        super(Decoder, self).__init__()
+        self.embed = nn.Embedding(vocab_size, embed_dim)
+        self.attention = Attention(hidden_dim)
+        self.lstm_cell = nn.LSTMCell(embed_dim + hidden_dim, hidden_dim)
+        self.linear = nn.Linear(hidden_dim, vocab_size)
+        self.dropout = nn.Dropout(0.5)
+        
+    def forward(self, encoder_out, global_context, captions):
+        batch_size = encoder_out.size(0)
+        seq_len = captions.size(1)
+        vocab_size = self.linear.out_features
+        
+        embeddings = self.embed(captions)
+        
+        h = global_context
+        c = torch.zeros_like(h)
+        
+        outputs = torch.zeros(batch_size, seq_len, vocab_size).to(encoder_out.device)
+        
+        for t in range(seq_len):
+            context_vector, _ = self.attention(encoder_out, h)
+            lstm_input = torch.cat([embeddings[:, t, :], context_vector], dim=1)
+            
+            h, c = self.lstm_cell(lstm_input, (h, c))
+            output = self.linear(self.dropout(h))
+            outputs[:, t, :] = output
+            
+        return outputs
+
+class VideoCaptionModel(nn.Module):
+    def __init__(self, vocab_size, feature_dim, embed_dim, hidden_dim):
+        super(VideoCaptionModel, self).__init__()
+        self.encoder = Encoder(feature_dim, hidden_dim)
+        self.decoder = Decoder(vocab_size, embed_dim, hidden_dim)
+        
+    def forward(self, video_features, captions):
+        encoder_out, global_context = self.encoder(video_features)
+        outputs = self.decoder(encoder_out, global_context, captions)
+        return outputs
