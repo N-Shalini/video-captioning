@@ -64,7 +64,7 @@ class Decoder(nn.Module):
         embeddings = self.embed(captions)
         
         h = encoder_out.mean(dim=1)
-c = torch.zeros_like(h)
+        c = torch.zeros_like(h)
         
         outputs = torch.zeros(batch_size, seq_len, vocab_size).to(encoder_out.device)
         
