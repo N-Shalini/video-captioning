@@ -44,9 +44,8 @@ class Encoder(nn.Module):
         x = self.dropout(x)
         
         x = x.view(batch_size, max_frames, -1)
-        global_context = x.mean(dim=1)
         
-        return x, global_context
+        return x
 
 class Decoder(nn.Module):
     def __init__(self, vocab_size, embed_dim, hidden_dim):
@@ -57,15 +56,15 @@ class Decoder(nn.Module):
         self.linear = nn.Linear(hidden_dim, vocab_size)
         self.dropout = nn.Dropout(0.5)
         
-    def forward(self, encoder_out, global_context, captions):
+    def forward(self, encoder_out, captions):
         batch_size = encoder_out.size(0)
         seq_len = captions.size(1)
         vocab_size = self.linear.out_features
         
         embeddings = self.embed(captions)
         
-        h = global_context
-        c = torch.zeros_like(h)
+        h = encoder_out.mean(dim=1)
+c = torch.zeros_like(h)
         
         outputs = torch.zeros(batch_size, seq_len, vocab_size).to(encoder_out.device)
         
@@ -86,6 +85,6 @@ class VideoCaptionModel(nn.Module):
         self.decoder = Decoder(vocab_size, embed_dim, hidden_dim)
         
     def forward(self, video_features, captions):
-        encoder_out, global_context = self.encoder(video_features)
-        outputs = self.decoder(encoder_out, global_context, captions)
+        encoder_out = self.encoder(video_features)
+        outputs = self.decoder(encoder_out, captions)
         return outputs
