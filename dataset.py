@@ -6,7 +6,7 @@ import numpy as np
 from config import Config
 
 class VideoCaptionDataset(Dataset):
-    def __init__(self, captions_path, vocab_path, features_dir):
+    def __init__(self, captions_path, vocab_path, features_dir, split="train", val_ratio=0.2):
         with open(captions_path, 'r') as f:
             self.captions = json.load(f)
             
@@ -16,12 +16,29 @@ class VideoCaptionDataset(Dataset):
         self.features_dir = features_dir
         
         # valid data filtering: only keep captions where corresponding feature file exists
-        self.data = []
+        valid_data = []
         for c in self.captions:
             vid_id = c['video_id']
             feat_path = os.path.join(self.features_dir, f"{vid_id}.npy")
             if os.path.exists(feat_path):
-                self.data.append(c)
+                valid_data.append(c)
+                
+        # Split by video_id to prevent data leakage
+        video_ids = list(set([c['video_id'] for c in valid_data]))
+        import random
+        random.seed(42) # fixed seed
+        random.shuffle(video_ids)
+        
+        split_idx = int(len(video_ids) * (1 - val_ratio))
+        train_vids = set(video_ids[:split_idx])
+        val_vids = set(video_ids[split_idx:])
+        
+        if split == "train":
+            self.data = [c for c in valid_data if c['video_id'] in train_vids]
+        elif split == "val":
+            self.data = [c for c in valid_data if c['video_id'] in val_vids]
+        else:
+            self.data = valid_data
 
     def __len__(self):
         return len(self.data)
@@ -55,6 +72,9 @@ def get_dataloader(captions_path="data/processed_captions.json",
                      vocab_path="data/vocab.json", 
                      features_dir=Config.FEATURES_DIR, 
                      batch_size=Config.BATCH_SIZE, 
-                     shuffle=True):
-    dataset = VideoCaptionDataset(captions_path, vocab_path, features_dir)
-    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+                     shuffle=True, split="train"):
+    dataset = VideoCaptionDataset(captions_path, vocab_path, features_dir, split=split)
+    return torch.utils.data.DataLoader(
+        dataset, batch_size=batch_size, shuffle=shuffle,
+        num_workers=4, pin_memory=True
+    )
