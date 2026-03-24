@@ -20,7 +20,7 @@ class Config:
     VOCAB_THRESHOLD = 2       # Minimum word count threshold
     
     # Training
-    BATCH_SIZE = 16
+    BATCH_SIZE = 64   #initially it was set to 16 try 16 later
     EPOCHS = 10
     LEARNING_RATE = 0.001
     
